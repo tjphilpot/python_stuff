@@ -1,5 +1,5 @@
 from typing import Set
-from english_words import english_words_lower_alpha_set
+from english_words import get_english_words_set
 from collections import Counter, defaultdict
 from itertools import islice
 
@@ -110,7 +110,7 @@ def _pandas_word_set() -> Set:
 
 
 def _english_word_set() -> Set:
-    return set(filter(lambda w: len(w) == 5, english_words_lower_alpha_set))
+    return set(filter(lambda w: len(w) == 5, get_english_words_set(['gcide','web2'], alpha=True, lower=True)))
 
 
 def _wordle_word_set() -> Set:
