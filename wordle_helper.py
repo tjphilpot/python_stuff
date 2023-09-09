@@ -1,7 +1,7 @@
-from typing import Set
+from typing import Set, List
 from english_words import get_english_words_set
 from collections import Counter, defaultdict
-from itertools import islice
+from itertools import islice, count, chain
 
 
 def _sort_dict_by_value(d: dict, reverse=False):
@@ -97,7 +97,7 @@ def _compute_letter_frequency(w: str, letter_freq_dict: dict):
         except KeyError:
             print(f'KeyError: {l} not in letter_freq_dict for word {w}')
 
-    return (w, freq_prob)
+    return w, freq_prob
 
 
 def _pandas_word_set() -> Set:
@@ -118,29 +118,96 @@ def _wordle_word_set() -> Set:
     return set(pd.read_csv('wordle_words.txt', names=['words']).squeeze('columns').values)
 
 
-class WordleHelper:
-    def __init__(self, word_set: set = None) -> None:
-        if word_set is None:
-            self.word_set = set(sorted(_wordle_word_set()))
-            letter_freq_dict = _build_letter_freq_dict(self.word_set)
-            self.word_frequencies = _sort_dict_by_value(dict(map(lambda x: _compute_letter_frequency(
-                x, letter_freq_dict), set(self.word_set))), reverse=True)
+class WordleMatchResults:
+    green_letters: str = None
+    yellow_letters: List[str] = None
+    gray_letters: str = None
 
-    def find_words(self, green_letters: str = None, yellow_letters: str | list = None, gray_letters: str = None, by_frequency=True, max_words=100):
+    def __init__(self, green_letters: str = None, yellow_letters: str | list = None, gray_letters: str = None):
         if green_letters is None and yellow_letters is None and gray_letters is None:
             raise ValueError(
                 "At least one of green_letters, yellow_letters and gray_letters must be specified.")
 
-        word_set = self.word_frequencies.keys() if by_frequency else self.word_set
-
+        self.green_letters = green_letters or '?????'
         if isinstance(yellow_letters, str):
-            yellow_letters = [yellow_letters,]
-            
-        words = list(islice(filter(lambda w1: filter_known_letters(green_letters, w1) and
-                                   filter_used_letters(yellow_letters, w1) and
-                                   filter_wrong_letters(green_letters, gray_letters, w1), word_set), max_words))
+            self.yellow_letters = [yellow_letters, ] if len(yellow_letters) > 0 else []
+        self.gray_letters = gray_letters or ''
+
+    def __add__(self, other):
+        combined_gray_letters, combined_green_letters, combined_yellow_letters = self.__internal_add(other)
+        return WordleMatchResults(combined_green_letters, combined_yellow_letters, combined_gray_letters)
+
+    def __internal_add(self, other):
+        combined_green_letters = ''
+        for i in range(len(self.green_letters)):
+            self_green = self.green_letters[i:i + 1]
+            other_green = other.green_letters[i:i + 1]
+            next_green_letter = self_green if self_green != '?' else other_green
+            combined_green_letters += next_green_letter
+            combined_yellow_letters = self.yellow_letters + other.yellow_letters
+            combined_yellow_letters = list(set(combined_yellow_letters) - {'?????'})
+        combined_gray_letters = "".join(set(self.gray_letters + other.gray_letters))
+        return combined_gray_letters, combined_green_letters, combined_yellow_letters
+
+    def __iadd__(self, other):
+        if other is None:
+            return self
+        combined_gray_letters, combined_green_letters, combined_yellow_letters = self.__internal_add(other)
+        self.green_letters = combined_green_letters
+        self.gray_letters = combined_gray_letters
+        self.yellow_letters = combined_yellow_letters
+        return self
+
+    def green_count(self) -> int:
+        return len(list(filter(lambda c: c != '?', self.green_letters)))
+
+    def yellow_count(self) -> int:
+        return len(list(filter(lambda c: c != '?', chain.from_iterable(self.yellow_letters))))
+
+    def __repr__(self):
+        return (f"Match Results: green_letters {self.green_letters}, yellow_count: {self.yellow_letters}, "
+                f"gray_count: {self.gray_letters}")
+
+class WordleHelper:
+    def __init__(self, word_set: set = None) -> None:
+        if word_set is None:
+            self.word_set = set(sorted(_wordle_word_set()))
+        letter_freq_dict = _build_letter_freq_dict(self.word_set)
+        self.word_frequencies = _sort_dict_by_value(dict(map(lambda x: _compute_letter_frequency(
+            x, letter_freq_dict), set(self.word_set))), reverse=True)
+
+    def find_words(self, green_letters: str = None, yellow_letters: str | list = None, gray_letters: str = None,
+                   match_results: WordleMatchResults = None,
+                   by_frequency=True, max_words=100):
+        if match_results is None:
+            match_results = WordleMatchResults(green_letters, yellow_letters, gray_letters)
+
+        word_set = self.word_frequencies.keys() if by_frequency else self.word_set
+        words = list(islice(filter(lambda w1: filter_known_letters(match_results.green_letters, w1) and
+                                   filter_used_letters(match_results.yellow_letters, w1) and
+                                   filter_wrong_letters(match_results.green_letters, match_results.gray_letters, w1),
+                                   word_set), max_words))
 
         if by_frequency:
             return list(map(lambda w: (w, round(self.word_frequencies[w] * 100, 2)), words))
         else:
             return words
+
+    @staticmethod
+    def match_letters(wordle_word: str, guess_word: str) -> WordleMatchResults:
+        green_letters = '?' * 5
+        yellow_letters = '?' * 5
+        gray_letters = ''
+        for index, guess_letter in enumerate(guess_word):
+            if wordle_word[index] == guess_letter:
+                green_letters = green_letters[:index] + guess_letter + green_letters[index+1:]
+                continue
+
+            try:
+                _ = wordle_word.index(guess_letter)
+                yellow_letters = yellow_letters[:index] + guess_letter + yellow_letters[index+1:]
+            except ValueError:
+                gray_letters += guess_letter
+
+        return WordleMatchResults(green_letters, yellow_letters, gray_letters)
+
