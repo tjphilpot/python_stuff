@@ -9,11 +9,13 @@ def _sort_dict_by_value(d: dict, reverse=False):
 
 
 def _normalize_letter_input(s: str):
+    """Given a string, return a lowercase string of 5 characters with ? if any characters are not supplied"""
     s = s.lower() if s is not None else ''
     return s.ljust(5, '?')
 
 
 def filter_known_letters(known_letters: str, s: str):
+    """Returns True if all non-'?' letters in known_letters appear in s, otherwise False"""
     known_letters = _normalize_letter_input(known_letters)
     all_match = True
     for i, l in enumerate(known_letters):
@@ -31,6 +33,8 @@ def letter_index_map(word: str) -> dict:
 
 
 def filter_used_letters(used_letters_list: list, s: str):
+    """Returns True if all letters in used_letters_list appear in s but
+     in different positions than in s, otherwise False"""
     # If used_letters_list is None or empty
     if not used_letters_list:
         return True
@@ -46,8 +50,9 @@ def filter_used_letters(used_letters_list: list, s: str):
 
             if used_letter in s_letter_map:
                 # Compute intersection of the used_letter in s and in the used_letter_word
-                # if the intersection is empty, the used_letter doesn't appear at the
-                # same position in s as it does in the used_letter_word
+                # if the intersection is not empty, the used_letter appears in
+                # same position in s as it does in the used_letter_word, so we
+                # know this word is not a solution
                 used_index = set(s_letter_map[used_letter]) & set(used_letter_map[used_letter])
                 if len(used_index) != 0:
                     return False
@@ -66,6 +71,7 @@ def filter_wrong_letters(green_letters: str, gray_letters: str, s: str):
     gray_letters = gray_letters if gray_letters is not None else ''
     has_correct_letters = True
     for i, l in enumerate(s):
+        # Don't search gray_letters if the letter is correct
         if green_letters[i] == l:
             continue
         elif l in gray_letters:
@@ -131,6 +137,8 @@ class WordleMatchResults:
         self.green_letters = green_letters or '?????'
         if isinstance(yellow_letters, str):
             self.yellow_letters = [yellow_letters, ] if len(yellow_letters) > 0 else []
+        else:
+            self.yellow_letters = yellow_letters
         self.gray_letters = gray_letters or ''
 
     def __add__(self, other):
@@ -167,6 +175,7 @@ class WordleMatchResults:
     def __repr__(self):
         return (f"Match Results: green_letters {self.green_letters}, yellow_count: {self.yellow_letters}, "
                 f"gray_count: {self.gray_letters}")
+
 
 class WordleHelper:
     def __init__(self, word_set: set = None) -> None:
@@ -211,3 +220,7 @@ class WordleHelper:
 
         return WordleMatchResults(green_letters, yellow_letters, gray_letters)
 
+
+if __name__ == '__main__':
+    wh = WordleHelper()
+    wh.find_words(green_letters='??o??', yellow_letters=['??ai??'], gray_letters='stnechr')
